@@ -59,6 +59,8 @@
     .delay-200 { animation-delay: 0.2s; }
     .delay-300 { animation-delay: 0.3s; }
     .delay-500 { animation-delay: 0.5s; }
+    .animate-spin { animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="bg-navy text-white antialiased">
@@ -632,15 +634,125 @@
     }, { threshold: 0.5 });
     counters.forEach(el => counterObserver.observe(el));
     
-    // Lead form
+    // ============ Lead Form → Gym OS API ============
+    const API_BASE = 'https://base44.app/api/apps/6a700b150c8d8b8e923580a1/functions';
+    const GYM_ID = 'gym_iron_forge';
+    
     document.getElementById('leadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const formData = new FormData(e.target);
+      const form = e.target;
+      const formData = new FormData(form);
       const data = Object.fromEntries(formData);
-      document.getElementById('leadForm').style.display = 'none';
-      document.getElementById('successMsg').classList.remove('hidden');
-      console.log('Lead captured:', data);
+      
+      // Validate required fields
+      if (!data.name || !data.phone) {
+        showError('Please fill in your name and phone number.');
+        return;
+      }
+      
+      // Show loading state
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const originalText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<svg class="animate-spin mr-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="40" stroke-dashoffset="20"/></svg> Submitting...';
+      
+      try {
+        // Call Gym OS createLeadWithConsent API
+        const response = await fetch(`${API_BASE}/createLeadWithConsent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gym_id: GYM_ID,
+            name: data.name,
+            phone: data.phone,
+            email: data.email || '',
+            fitness_goal: data.goal || 'general_fitness',
+            consent_status: 'granted',
+            source: 'website',
+            preferred_visit_period: data.visit_time || '',
+            notes: data.visit_time ? `Preferred visit: ${data.visit_time}` : ''
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // Hide form, show success
+          form.style.display = 'none';
+          const successMsg = document.getElementById('successMsg');
+          successMsg.classList.remove('hidden');
+          
+          // Add WhatsApp follow-up link to success message
+          const waLink = document.createElement('a');
+          waLink.href = `https://wa.me/917737077479?text=Hi%20IRON%20FORGE!%20I%20just%20submitted%20a%20trial%20pass%20request.%20Name:%20${encodeURIComponent(data.name)}`;
+          waLink.target = '_blank';
+          waLink.className = 'inline-flex items-center gap-2 mt-4 px-6 py-3 bg-[#25D366] text-white font-semibold rounded-xl hover:scale-105 transition-all';
+          waLink.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.692.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347"/></svg> Message us on WhatsApp';
+          successMsg.appendChild(waLink);
+        } else {
+          throw new Error(result.error || 'Something went wrong');
+        }
+      } catch (error) {
+        // Show error with retry
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+        showError(error.message || 'Connection error. Please try again or WhatsApp us directly.');
+      }
+    });
+    
+    function showError(msg) {
+      // Remove existing error
+      const existing = document.getElementById('formError');
+      if (existing) existing.remove();
+      
+      const errorDiv = document.createElement('div');
+      errorDiv.id = 'formError';
+      errorDiv.className = 'text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3';
+      errorDiv.textContent = msg;
+      
+      const form = document.getElementById('leadForm');
+      form.insertBefore(errorDiv, form.querySelector('button[type="submit"]'));
+      
+      // Auto-remove after 5 seconds
+      setTimeout(() => errorDiv.remove(), 5000);
+    }
+    
+    // ============ Class booking buttons → scroll to contact with pre-filled goal ============
+    document.querySelectorAll('.card-hover[class*="cursor-pointer"]').forEach((card, i) => {
+      card.addEventListener('click', () => {
+        const goals = ['weight_loss', 'muscle_gain', 'general_fitness', 'strength'];
+        const goal = goals[i] || 'general_fitness';
+        const goalSelect = document.querySelector('select[name="goal"]');
+        if (goalSelect) goalSelect.value = goal;
+        document.getElementById('contact').scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+    
+    // ============ Active nav highlighting on scroll ============
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('nav a[href^="#"]');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop - 100;
+        if (window.scrollY >= sectionTop) current = section.id;
+      });
+      navLinks.forEach(link => {
+        link.classList.remove('text-white');
+        if (link.getAttribute('href') === `#${current}` && !link.classList.contains('bg-electric')) {
+          link.classList.add('text-white');
+        }
+      });
     });
   </script>
+
+  <!-- Floating WhatsApp Button -->
+  <a href="https://wa.me/917737077479?text=Hi%20IRON%20FORGE!%20I%20want%20to%20book%20a%20free%20trial%20pass." 
+     target="_blank" 
+     class="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all"
+     style="box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.692.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+  </a>
+
 </body>
 </html>
